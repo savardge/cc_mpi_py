@@ -1,0 +1,4 @@
+- python 3
+- obspy
+- mpi4py
+- numba
