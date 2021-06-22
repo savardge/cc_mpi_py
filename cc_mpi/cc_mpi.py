@@ -1,24 +1,15 @@
 #!/usr/bin/env python
 import sys
-import numpy as np
 import math
-import os
-import glob
-import collections
-import subprocess
-import utm
-import obspy
 import glob
 import time
 from obspy.clients.fdsn import Client
 from obspy.clients.iris import Client as tt
 from obspy import UTCDateTime
 from obspy import read
-from numba import jit, cuda
+# from numba import jit, cuda
 from mpi4py import MPI
-from obspy.signal.cross_correlation import correlate
-from scipy.signal import detrend, resample
-from utils import *
+from cc_mpi.utils import *
 
 # Launch MPI
 time_start = time.time()
@@ -34,9 +25,9 @@ tags = enum('READY', 'DONE', 'EXIT', 'START')
 
 # Count files needed
 ########## EDIT THIS #######################
-files = glob.glob('waveforms/*.MSEED')  # Location of files changeable
+wf_files = glob.glob('waveforms/*.MSEED')  # Location of files changeable
 ############################################
-nfile = len(files)
+nfile = len(wf_files)
 
 # Start Client
 # Pull station inventory
@@ -59,7 +50,7 @@ for event1 in range(0, len(eventnames) - 1):
         evpairs.append((eventnames[event1], eventnames[event2]))
 
 # Pull station inventory
-stalst = np.empty(len(inventory[0]), dtype='object')
+stalst = np.empty(len(inventory[0].stations), dtype='object')
 for stindx, stations in enumerate(inventory[0]):
     stat = stations.code
     stalst[stindx] = stat
@@ -76,7 +67,7 @@ if rank == 0:  # Master branch
     step = math.ceil(ncc / nchunk)
 
     wf_count = 0
-    for ind, file in enumerate(files):
+    for ind, file in enumerate(wf_files):
         waveforms[wf_count] = ind  # Point to file - file read in worker
         # File index in glob file list
         strs = (file.split('/'))[1]
@@ -281,11 +272,11 @@ elif rank > 0:  # IF WORKER
                     continue
                 cc_worker[ipair, 2] = sta_index[ind]
                 station = stalst[sta1]
-                # Read in waves --- into obspy
+                # Read in waveforms --- into obspy
                 waveform1 = waveforms[ind]
                 waveform2 = waveforms[cc_indexes[ipair, 1]]
-                stream1 = read(files[waveform1])
-                stream2 = read(files[waveform2])
+                stream1 = read(wf_files[waveform1])
+                stream2 = read(wf_files[waveform2])
                 # Process streams
                 stream1.detrend('constant')
                 stream1.detrend('linear')
@@ -340,6 +331,7 @@ elif rank > 0:  # IF WORKER
                     result = list(filter(None, str(result).split(' ')))
                     sarr1 = time1 + float(result[26])
                     s1 = float(result[26])
+
                 # Trim streams to 3 length centered on arrivals
                 str1_p = stream1.copy()
                 str1_s = stream1.copy()
